@@ -841,35 +841,38 @@ const Sidebar = ({ enrolled, activeId, onSelect, progress }) => {
 
 /* ─── HUGGING FACE AI HELPERS ────────────────────────────────────────────────── */
 
-// Uses HuggingFace router (https://router.huggingface.co/v1) — the modern, reliable
-// inference endpoint. Token is read from Vite env var VITE_HF_TOKEN (set in Vercel).
-// Falls back through two models if the first is overloaded.
+// Correct endpoint: https://router.huggingface.co/v1/chat/completions
+// Models use :provider suffix to select fast inference backends.
+// Token from VITE_HF_TOKEN env var (set in Vercel → Settings → Env Vars).
+// Falls back through providers if one is overloaded.
 
 const HF_MODELS = [
-  "mistralai/Mistral-7B-Instruct-v0.3",   // primary — fast, instruction-tuned
-  "HuggingFaceH4/zephyr-7b-beta",         // fallback 1
-  "Qwen/Qwen2.5-7B-Instruct",             // fallback 2
+  "meta-llama/Llama-3.1-8B-Instruct:cerebras",   // primary — fastest (Cerebras)
+  "meta-llama/Llama-3.1-8B-Instruct:together",   // fallback 1 — Together AI
+  "meta-llama/Llama-3.1-8B-Instruct:novita",     // fallback 2 — Novita
+  "mistralai/Mistral-7B-Instruct-v0.3:together",  // fallback 3 — Mistral on Together
 ];
 
 function getHFToken() {
-  // Vite exposes env vars prefixed with VITE_ at build time
   return (typeof import.meta !== "undefined" && import.meta.env?.VITE_HF_TOKEN) || "";
 }
 
 async function hfChatWithModel(model, messages) {
   const token = getHFToken();
-  const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (!token) throw new Error("No VITE_HF_TOKEN set. Add it in Vercel → Settings → Env Vars.");
 
-  const res = await fetch("https://router.huggingface.co/hf-inference/v1/chat/completions", {
+  const res = await fetch("https://router.huggingface.co/v1/chat/completions", {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
     body: JSON.stringify({ model, messages, max_tokens: 512, stream: false }),
   });
 
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
-    throw new Error(e.error?.message || `HF error ${res.status}`);
+    throw new Error(e.error?.message || `HF ${res.status}: ${res.statusText}`);
   }
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content;
@@ -877,7 +880,7 @@ async function hfChatWithModel(model, messages) {
   return text;
 }
 
-// Auto-retry across fallback models
+// Auto-retry across fallback models/providers
 async function hfChat(messages) {
   let lastErr;
   for (const model of HF_MODELS) {
@@ -885,10 +888,10 @@ async function hfChat(messages) {
       return await hfChatWithModel(model, messages);
     } catch (err) {
       lastErr = err;
-      console.warn(`[HF] Model ${model} failed:`, err.message, "— trying next…");
+      console.warn(`[HF] ${model} failed:`, err.message, "— trying next…");
     }
   }
-  throw new Error(`All models failed. Last error: ${lastErr?.message}`);
+  throw new Error(`All models failed. Last: ${lastErr?.message}`);
 }
 
 /* ─── AI CHAT PANEL ──────────────────────────────────────────────────────────── */
