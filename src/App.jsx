@@ -3,9 +3,9 @@ import { useState, useEffect, useRef } from "react";
 /* ─── DATA ──────────────────────────────────────────────────────────────────── */
 
 const BASE_USERS = [
-  { id: 1, name: "Alex Morgan",  email: "alex@demo.com",  password: "demo123",  role: "student",    initials: "AM" },
-  { id: 2, name: "Elena Voss",   email: "elena@demo.com", password: "demo123",  role: "instructor", initials: "EV" },
-  { id: 3, name: "Admin User",   email: "admin@demo.com", password: "admin123", role: "admin",      initials: "AU" },
+  { id: 1, name: "Alex Morgan",  email: "alex@demo.com",  pin: "demo123",  role: "student",    initials: "AM" },
+  { id: 2, name: "Elena Voss",   email: "elena@demo.com", pin: "demo123",  role: "instructor", initials: "EV" },
+  { id: 3, name: "Admin User",   email: "admin@demo.com", pin: "admin123", role: "admin",      initials: "AU" },
 ];
 
 const COURSES = [
@@ -716,25 +716,25 @@ const HomePage = ({ onGoToAuth, onGoToDashboard, user, embedded }) => {
 const AuthPage = ({ mode: initMode, onLogin, onRegister, users, onBack }) => {
   const [mode, setMode] = useState(initMode || "login");
   const [role, setRole] = useState("student");
-  const [form, setForm] = useState({ name:"", email:"", password:"" });
+  const [form, setForm] = useState({ name:"", email:"", pin:"" });
   const [err, setErr] = useState("");
 
   const submit = () => {
     setErr("");
     if (mode === "login") {
       const e = form.email.trim().toLowerCase();
-      const p = form.password.trim();
-      const u = users.find(x => x.email.toLowerCase() === e && x.password === p);
+      const p = form.pin.trim();
+      const u = users.find(x => x.email.toLowerCase() === e && x.pin === p);
       if (!u) { setErr("Invalid email or password. Try: alex@demo.com / demo123"); return; }
       onLogin(u);
     } else {
-      if (!form.name.trim() || !form.email.trim() || !form.password.trim()) { setErr("All fields are required."); return; }
+      if (!form.name.trim() || !form.email.trim() || !form.pin.trim()) { setErr("All fields are required."); return; }
       if (users.find(x => x.email.toLowerCase() === form.email.trim().toLowerCase())) { setErr("Email already registered."); return; }
       const newUser = {
         id: Date.now(),
         name: form.name.trim(),
         email: form.email.trim(),
-        password: form.password,
+        pin: form.pin,
         role,
         initials: form.name.trim().split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
       };
@@ -782,8 +782,8 @@ const AuthPage = ({ mode: initMode, onLogin, onRegister, users, onBack }) => {
           </div>
           <div className="af">
             <label className="af-lbl">Password</label>
-            <input className="af-input" type="password" placeholder="••••••••" value={form.password}
-              onChange={e=>setForm({...form,password:e.target.value})}
+            <input className="af-input" type="password" placeholder="••••••••" value={form.pin}
+              onChange={e=>setForm({...form,pin:e.target.value})}
               onKeyDown={e=>e.key==="Enter"&&submit()} />
           </div>
 
@@ -839,63 +839,60 @@ const Sidebar = ({ enrolled, activeId, onSelect, progress }) => {
 };
 
 
-/* ─── HUGGING FACE HELPERS ───────────────────────────────────────────────────── */
+/* ─── HUGGING FACE AI HELPERS ────────────────────────────────────────────────── */
 
-const HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.3";
+// Uses HuggingFace router (https://router.huggingface.co/v1) — the modern, reliable
+// inference endpoint. Token is read from Vite env var VITE_HF_TOKEN (set in Vercel).
+// Falls back through two models if the first is overloaded.
 
-async function hfChat(token, messages) {
-  const res = await fetch(`https://api-inference.huggingface.co/models/${HF_MODEL}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: HF_MODEL, messages, max_tokens: 512, stream: false }),
-  });
-  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `HF API error ${res.status}`); }
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "No response.";
+const HF_MODELS = [
+  "mistralai/Mistral-7B-Instruct-v0.3",   // primary — fast, instruction-tuned
+  "HuggingFaceH4/zephyr-7b-beta",         // fallback 1
+  "Qwen/Qwen2.5-7B-Instruct",             // fallback 2
+];
+
+function getHFToken() {
+  // Vite exposes env vars prefixed with VITE_ at build time
+  return (typeof import.meta !== "undefined" && import.meta.env?.VITE_HF_TOKEN) || "";
 }
 
-/* ─── HF TOKEN MODAL ─────────────────────────────────────────────────────────── */
-const HFTokenModal = ({ onSave, onClose }) => {
-  const [tok, setTok] = useState("");
-  return (
-    <div className="modal-bg" onClick={e => e.target.classList.contains("modal-bg") && onClose()}>
-      <div className="modal">
-        <div className="modal-title">Connect Hugging Face <span className="hf-powered">🤗 Free</span></div>
-        <div className="modal-sub">
-          Get a free token to unlock the AI Tutor and Quiz Generator powered by Mistral-7B.
-        </div>
-        <div>
-          {[
-            "Go to huggingface.co/settings/tokens",
-            'Click "New token" → Name it "learnly" → Role: Read',
-            "Copy the token (starts with hf_...) and paste below",
-          ].map((s,i) => (
-            <div key={i} className="modal-step">
-              <div className="modal-step-n">{i+1}</div>
-              <div>{s}</div>
-            </div>
-          ))}
-        </div>
-        <input
-          className="modal-inp"
-          placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxx"
-          value={tok}
-          onChange={e => setTok(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && tok.startsWith("hf_") && onSave(tok)}
-        />
-        <div className="modal-btns">
-          <button className="modal-btn-s" onClick={onClose}>Cancel</button>
-          <button className="modal-btn-p" onClick={() => onSave(tok)} disabled={!tok.startsWith("hf_")}>
-            Save & Activate AI →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+async function hfChatWithModel(model, messages) {
+  const token = getHFToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch("https://router.huggingface.co/hf-inference/v1/chat/completions", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ model, messages, max_tokens: 512, stream: false }),
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `HF error ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Empty response from model");
+  return text;
+}
+
+// Auto-retry across fallback models
+async function hfChat(messages) {
+  let lastErr;
+  for (const model of HF_MODELS) {
+    try {
+      return await hfChatWithModel(model, messages);
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[HF] Model ${model} failed:`, err.message, "— trying next…");
+    }
+  }
+  throw new Error(`All models failed. Last error: ${lastErr?.message}`);
+}
 
 /* ─── AI CHAT PANEL ──────────────────────────────────────────────────────────── */
-const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
+const AIChatPanel = ({ vid, course }) => {
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -913,7 +910,6 @@ const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
   const send = async (text) => {
     const q = text || input.trim();
     if (!q) return;
-    if (!hfToken) { onNeedToken(); return; }
     setInput("");
     const userMsg = { role: "user", content: q };
     setMsgs(prev => [...prev, { type: "user", text: q }]);
@@ -921,7 +917,7 @@ const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
     try {
       const systemPrompt = `You are a concise, expert tutor for the course "${course.title}". The student is currently watching: "${vid?.t}". Answer in 2-4 short paragraphs max. Be clear, practical, and encouraging.`;
       const history = msgs.slice(-6).map(m => ({ role: m.type === "user" ? "user" : "assistant", content: m.text }));
-      const reply = await hfChat(hfToken, [{ role: "system", content: systemPrompt }, ...history, userMsg]);
+      const reply = await hfChat([{ role: "system", content: systemPrompt }, ...history, userMsg]);
       setMsgs(prev => [...prev, { type: "ai", text: reply }]);
     } catch (err) {
       setMsgs(prev => [...prev, { type: "ai", text: `⚠️ ${err.message}` }]);
@@ -929,14 +925,22 @@ const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
     setLoading(false);
   };
 
+  const hasToken = !!getHFToken();
+
   return (
     <div className="chat-wrap">
+      {!hasToken && (
+        <div style={{padding:"8px 12px",background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",fontSize:10,color:"#f59e0b",lineHeight:1.6,flexShrink:0}}>
+          ⚠️ No HuggingFace token set. Add <code style={{background:"rgba(0,0,0,.3)",padding:"1px 4px"}}>VITE_HF_TOKEN</code> in Vercel env vars for reliable AI responses.{" "}
+          <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" style={{color:"#f59e0b",textDecoration:"underline"}}>Get token →</a>
+        </div>
+      )}
       <div className="chat-messages">
         {msgs.length === 0 && (
           <div className="ai-empty">
             <div style={{fontSize:22}}>🤖</div>
             <div>Ask anything about <strong style={{color:"var(--t2)"}}>{vid?.t?.split(" — ")[0]}</strong></div>
-            <div style={{fontSize:10}}>Powered by Mistral-7B via Hugging Face</div>
+            <div style={{fontSize:10}}>Powered by Mistral via Hugging Face</div>
           </div>
         )}
         {msgs.map((m, i) => (
@@ -958,7 +962,7 @@ const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
       <div className="chat-input-row">
         <input
           className="chat-input"
-          placeholder={hfToken ? "Ask about this lesson..." : "Add HF token to chat..."}
+          placeholder="Ask anything about this lesson..."
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !loading && send()}
@@ -970,21 +974,20 @@ const AIChatPanel = ({ hfToken, vid, course, onNeedToken }) => {
 };
 
 /* ─── QUIZ PANEL ─────────────────────────────────────────────────────────────── */
-const QuizPanel = ({ hfToken, vid, course, onNeedToken }) => {
+const QuizPanel = ({ vid, course }) => {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(false);
   const [score, setScore] = useState(null);
 
   const generate = async () => {
-    if (!hfToken) { onNeedToken(); return; }
     setLoading(true); setQuestions([]); setAnswers({}); setScore(null);
     try {
       const prompt = `Generate exactly 4 multiple-choice quiz questions about "${vid?.t?.split(" — ")[0]}" in the context of "${course.title}".
 
 Return ONLY valid JSON (no markdown, no explanation) in this exact format:
 [{"q":"Question text?","opts":["A) option","B) option","C) option","D) option"],"ans":"A) correct option"}]`;
-      const raw = await hfChat(hfToken, [
+      const raw = await hfChat([
         { role: "system", content: "You are a quiz generator. Return only valid JSON arrays, no markdown, no extra text." },
         { role: "user", content: prompt },
       ]);
@@ -1039,7 +1042,7 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
         <div className="ai-empty">
           <div style={{fontSize:20}}>📝</div>
           <div>Generate an AI quiz for the current lesson</div>
-          <div style={{fontSize:10}}>Powered by Mistral-7B via Hugging Face</div>
+          <div style={{fontSize:10}}>Powered by Mistral via Hugging Face</div>
         </div>
       )}
     </div>
@@ -1047,12 +1050,11 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
 };
 
 /* ─── LEARNING PAGE ──────────────────────────────────────────────────────────── */
-const LearnPage = ({ course, progress, onProgress, notify, hfToken, onNeedToken }) => {
+const LearnPage = ({ course, progress, onProgress, notify }) => {
   const allVids = course.secs.flatMap(s => s.vids);
   const [activeId, setActiveId] = useState(allVids[0]?.id);
   const [done, setDone] = useState(new Set(progress[course.id] || []));
   const [aiTab, setAiTab] = useState("chat");
-  const [showTokenModal, setShowTokenModal] = useState(false);
 
   // Reset when course changes
   useEffect(() => {
@@ -1185,27 +1187,21 @@ const LearnPage = ({ course, progress, onProgress, notify, hfToken, onNeedToken 
                 <div className="ai-tab-bar">
                   <button className={`ai-tab ${aiTab==="chat"?"on":""}`} onClick={()=>setAiTab("chat")}>
                     🤖 AI Tutor
-                    {!hfToken && <span className="ai-tab-badge">Setup</span>}
                   </button>
                   <button className={`ai-tab ${aiTab==="quiz"?"on":""}`} onClick={()=>setAiTab("quiz")}>
                     📝 Quiz Me
-                    {!hfToken && <span className="ai-tab-badge">Setup</span>}
                   </button>
                   <div style={{flex:1}}/>
-                  {hfToken
-                    ? <div style={{display:"flex",alignItems:"center",padding:"0 12px",fontSize:9,color:"var(--a)"}}>🤗 HF Connected</div>
-                    : <button style={{margin:"auto 10px",fontSize:9,padding:"4px 10px",background:"rgba(255,212,0,.1)",color:"#ffd400",border:"1px solid rgba(255,212,0,.2)",borderRadius:20,cursor:"pointer",fontFamily:"var(--fn)"}} onClick={()=>setShowTokenModal(true)}>Connect HF →</button>
-                  }
+                  <div style={{display:"flex",alignItems:"center",padding:"0 10px",fontSize:9,color:"#ffd400"}}>🤗 AI Powered</div>
                 </div>
-                {aiTab==="chat" && <AIChatPanel hfToken={hfToken} vid={vid} course={course} onNeedToken={()=>setShowTokenModal(true)}/>}
-                {aiTab==="quiz" && <QuizPanel hfToken={hfToken} vid={vid} course={course} onNeedToken={()=>setShowTokenModal(true)}/>}
+                {aiTab==="chat" && <AIChatPanel vid={vid} course={course}/>}
+                {aiTab==="quiz" && <QuizPanel vid={vid} course={course}/>}
               </div>
             </div>
           </>
         ))}
       </div>
     </div>
-    {showTokenModal && <HFTokenModal onSave={t=>{onNeedToken(t);setShowTokenModal(false);}} onClose={()=>setShowTokenModal(false)}/>}
     </>
   );
 };
@@ -1361,10 +1357,8 @@ export default function App() {
   const [enrolled, setEnrolled]   = useState([1]);
   const [progress, setProgress]   = useState({});
   const [notif, setNotif]         = useState(null);
-  const [hfToken, setHfToken]     = useState(localStorage.getItem('hf_token') || '');
 
   const notify = msg => setNotif(msg);
-  const saveHfToken = t => { setHfToken(t); try { localStorage.setItem('hf_token', t); } catch(e){} notify('🤗 Hugging Face AI activated!'); };
 
   const doLogin = u => {
     setUser(u);
@@ -1458,7 +1452,7 @@ export default function App() {
             <div style={{flex:1,overflowY:"auto"}}>
               {page==="home"     && <HomePage user={user} embedded={true} onGoToAuth={m=>{setAuthMode(m);setScreen("auth");}} onGoToDashboard={()=>setPage("catalog")}/>}
               {page==="catalog"  && <CatalogPage enrolled={enrolled} onEnroll={id=>setEnrolled(p=>p.includes(id)?p:[...p,id])} onOpen={openCourse} notify={notify}/>}
-              {page==="learning" && course && <LearnPage course={course} progress={progress} onProgress={(id,l)=>setProgress(p=>({...p,[id]:l}))} notify={notify} hfToken={hfToken} onNeedToken={t=>{if(typeof t==="string"&&t.startsWith("hf_"))saveHfToken(t);}}/>}
+              {page==="learning" && course && <LearnPage course={course} progress={progress} onProgress={(id,l)=>setProgress(p=>({...p,[id]:l}))} notify={notify}/>}
               {page==="profile"  && <ProfilePage user={user} enrolled={enrolled} progress={progress} onOpen={openCourse}/>}
               {page==="admin"    && <AdminPage users={users}/>}
             </div>
