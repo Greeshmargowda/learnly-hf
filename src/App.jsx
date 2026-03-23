@@ -111,7 +111,6 @@ const TESTIMONIALS = [
 /* ─── CSS ───────────────────────────────────────────────────────────────────── */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0a0a;--bg2:#111;--bg3:#161616;--bg4:#1e1e1e;--bg5:#252525;
@@ -989,7 +988,7 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
         { role: "system", content: "You are a quiz generator. Return only valid JSON arrays, no markdown, no extra text." },
         { role: "user", content: prompt },
       ]);
-      const jsonStr = raw.match(/\[[\s\S]*\]/)?.[0];
+      const start = raw.indexOf('['); const end = raw.lastIndexOf(']'); const jsonStr = start !== -1 && end > start ? raw.slice(start, end + 1) : null;
       if (!jsonStr) throw new Error("Could not parse quiz JSON");
       const parsed = JSON.parse(jsonStr);
       setQuestions(parsed.slice(0,4));
