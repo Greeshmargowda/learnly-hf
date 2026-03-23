@@ -1082,6 +1082,7 @@ const LearnPage = ({ course, progress, onProgress, notify, hfToken, onNeedToken 
   const curSec = course.secs.find(s => s.vids.find(v => v.id === vid?.id));
 
   return (
+    <>
     <div className="learn">
       {/* Lesson panel */}
       <div className="learn-panel">
@@ -1205,6 +1206,7 @@ const LearnPage = ({ course, progress, onProgress, notify, hfToken, onNeedToken 
       </div>
     </div>
     {showTokenModal && <HFTokenModal onSave={t=>{onNeedToken(t);setShowTokenModal(false);}} onClose={()=>setShowTokenModal(false)}/>}
+    </>
   );
 };
 
